@@ -69,6 +69,7 @@ def create_data_loaders(
     workers: int,
     seed: int,
     foreground_probability: float,
+    pin_memory: bool,
 ) -> tuple[DataLoader[dict[str, object]], DataLoader[dict[str, object]], dict[str, Any]]:
     pairs = discover_volume_pairs(data_root)
     splits = split_by_patient(pairs, seed=seed)
@@ -88,7 +89,7 @@ def create_data_loaders(
     loader_arguments = {
         "batch_size": batch_size,
         "num_workers": workers,
-        "pin_memory": torch.cuda.is_available(),
+        "pin_memory": pin_memory,
         "persistent_workers": workers > 0,
     }
     train_loader = DataLoader(
@@ -195,8 +196,8 @@ def train(arguments: argparse.Namespace) -> None:
         encoding="utf-8",
     )
 
-    _set_seed(arguments.seed, arguments.deterministic)
     device = _resolve_device(arguments.device)
+    _set_seed(arguments.seed, arguments.deterministic, device)
     use_amp = arguments.amp and device.type == "cuda"
     patch_size = tuple(arguments.patch_size)
     train_loader, validation_loader, splits = create_data_loaders(
@@ -206,6 +207,7 @@ def train(arguments: argparse.Namespace) -> None:
         workers=arguments.workers,
         seed=arguments.seed,
         foreground_probability=arguments.foreground_probability,
+        pin_memory=device.type == "cuda",
     )
     write_split_manifest(splits, output_directory / "split_manifest.json")
 
@@ -329,14 +331,14 @@ def _resolve_device(requested_device: str) -> torch.device:
     return device
 
 
-def _set_seed(seed: int, deterministic: bool) -> None:
+def _set_seed(seed: int, deterministic: bool, device: torch.device) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
+    if device.type == "cuda":
         torch.cuda.manual_seed_all(seed)
     torch.use_deterministic_algorithms(deterministic)
-    torch.backends.cudnn.benchmark = not deterministic
+    torch.backends.cudnn.benchmark = device.type == "cuda" and not deterministic
 
 
 def _validate_arguments(arguments: argparse.Namespace) -> None:
