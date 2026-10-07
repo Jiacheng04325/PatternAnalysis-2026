@@ -34,7 +34,7 @@ python train.py \
     --patch-size 64 128 128 \
     --base-channels 16 \
     --batch-size 1 \
-    --workers 2 \
+    --workers 0 \
     --device cuda \
     --max-train-batches 1 \
     --max-validation-batches 1
