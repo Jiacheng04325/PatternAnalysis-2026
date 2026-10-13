@@ -25,6 +25,7 @@ from losses import (
     dice_statistics,
 )
 from modules import ResidualUNet3D, UNet3D, count_trainable_parameters
+from visualization import plot_training_history
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -275,6 +276,11 @@ def train(arguments: argparse.Namespace) -> None:
         }
         with metrics_path.open("a", encoding="utf-8") as metrics_file:
             metrics_file.write(json.dumps(epoch_metrics) + "\n")
+        plot_training_history(
+            metrics_path,
+            output_directory / "training_curves.png",
+            arguments.selection_class,
+        )
         print(json.dumps(epoch_metrics, indent=2), flush=True)
 
         selection_score = validation_metrics["per_class_dice"][

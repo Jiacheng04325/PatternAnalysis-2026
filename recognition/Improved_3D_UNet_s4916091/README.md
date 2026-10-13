@@ -118,6 +118,8 @@ The best checkpoint is selected using validation Dice for class 5, the prostate,
 Initial experiments will use 3D patches and batch size one.
 Patch size and channel width will be selected through a measured GPU memory smoke test.
 Full-volume inference will use overlapping sliding-window predictions if a full volume does not fit safely in memory.
+The training script writes an updated loss and prostate Dice curve after every epoch.
+The prediction script writes a five-panel comparison containing the input MRI, ground truth, prediction, prostate false positives, and prostate false negatives.
 
 ## Evaluation Plan
 
@@ -157,6 +159,7 @@ losses.py
 train.py
 predict.py
 metrics.py
+visualization.py
 train_gpu.sh
 evaluate_gpu.sh
 smoke_gpu.sh

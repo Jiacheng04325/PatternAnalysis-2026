@@ -16,6 +16,7 @@ from torch import nn
 from dataset import HipMRIDataset, discover_volume_pairs, split_by_patient
 from metrics import aggregate_case_metrics, evaluate_segmentation
 from modules import ResidualUNet3D, UNet3D
+from visualization import save_segmentation_figure
 
 
 NUM_CLASSES = 6
@@ -33,6 +34,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--save-predictions", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--save-figures", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--hd95", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--max-cases", type=int)
     return parser
@@ -159,14 +161,19 @@ def evaluate_checkpoint(arguments: argparse.Namespace) -> None:
     if metrics_path.exists():
         raise FileExistsError(f"Evaluation metrics already exist: {metrics_path}")
     prediction_directory = output_directory / "predictions"
+    figure_directory = output_directory / "figures"
     output_directory.mkdir(parents=True, exist_ok=True)
     if arguments.save_predictions:
         prediction_directory.mkdir(parents=True, exist_ok=True)
+    if arguments.save_figures:
+        figure_directory.mkdir(parents=True, exist_ok=True)
 
     case_results = []
     for index in range(len(dataset)):
         sample = dataset[index]
-        image = _require_tensor(sample, "image").unsqueeze(0).to(device)
+        image_tensor = _require_tensor(sample, "image")
+        image_volume = image_tensor[0].cpu().numpy()
+        image = image_tensor.unsqueeze(0).to(device)
         target = _require_tensor(sample, "label").cpu().numpy()
         spacing_xyz = _require_tensor(sample, "spacing_xyz").tolist()
         spacing_zyx = tuple(reversed(spacing_xyz))
@@ -203,12 +210,25 @@ def evaluate_checkpoint(arguments: argparse.Namespace) -> None:
                 _require_string(sample, "image_path"),
                 prediction_path,
             )
+        figure_path = None
+        figure_slice = None
+        if arguments.save_figures:
+            figure_path = figure_directory / f"{case_name}_COMPARISON.png"
+            figure_slice = save_segmentation_figure(
+                image=image_volume,
+                target=target,
+                prediction=prediction,
+                output_path=figure_path,
+                focus_class=5,
+            )
         case_result = {
             "case": case_name,
             "patient_id": patient_id,
             "visit": visit,
             "inference_seconds": inference_seconds,
             "prediction_path": None if prediction_path is None else str(prediction_path),
+            "figure_path": None if figure_path is None else str(figure_path),
+            "figure_slice_zyx": figure_slice,
             "classes": classes,
         }
         case_results.append(case_result)
