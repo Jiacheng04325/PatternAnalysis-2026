@@ -6,7 +6,8 @@ This project develops a 3D medical image segmentation prototype for automatic pe
 The system segments the body, bone, bladder, rectum, and prostate from 3D HipMRI volumes.
 Its intended users are medical imaging specialists who need an initial contour draft that can be reviewed and corrected before treatment planning.
 
-The project compares a standard 3D U-Net baseline with a residual 3D Improved U-Net using deep supervision.
+The selected Hard Difficulty model is a residual 3D Improved U-Net using deep supervision.
+A standard 3D U-Net is implemented only as the required experimental baseline.
 The main engineering question is whether improved 3D spatial context reduces clinically important boundary errors at the prostate base and apex enough to justify additional GPU memory and inference time.
 
 ## Feasibility Review
@@ -56,7 +57,8 @@ The initial budget is one short CPU data check and one A100 smoke test before ba
 Long experiments will use Slurm batch jobs with explicit memory and time limits.
 If memory use is excessive, patch size and base channel width will be reduced while retaining the residual and deep-supervision design.
 If common-spacing resampling removes useful detail, native-resolution patch training will be evaluated as the fallback.
-The next experiment will verify the label mapping, generate a deterministic patient-level split, and run one training and validation batch through the baseline.
+The label mapping, deterministic patient-level split, CPU forward pass, A100 smoke test, and controlled short benchmark have been verified.
+The next experiment is the matched formal training of the baseline and selected model.
 
 ## Dataset Audit
 
@@ -74,8 +76,9 @@ The in-plane spacing has nine observed values between approximately 1.4062 mm an
 The most common spacing is approximately `1.6797 x 1.6797 x 1.56 mm`.
 
 Every label volume contains identifiers 0 to 5.
-The dataset contains background and five foreground structures: body, bone, urinary bladder, rectum, and prostate.
-The exact numeric mapping of foreground identifiers will be verified against an authoritative dataset description before training.
+The dataset contains background and five foreground structures.
+The label mapping is `0: background`, `1: body`, `2: bone`, `3: urinary bladder`, `4: rectum`, and `5: prostate`.
+This mapping is consistent with the HipMRI structure list and the observed full-dataset voxel volumes.
 
 The overall voxel ratios for labels 0 to 5 are approximately:
 
@@ -90,6 +93,12 @@ The overall voxel ratios for labels 0 to 5 are approximately:
 
 The severe foreground imbalance, especially for the smallest structures, will be addressed through a combined Dice and Cross-Entropy objective.
 
+The A100 smoke test completed successfully with mixed precision and no training error.
+For the proposed model, one training batch and one validation batch used approximately 1,589.7 MB peak GPU memory.
+The proposed model has 5,734,888 trainable parameters, while the baseline has 5,646,470.
+A controlled benchmark of ten training batches and three validation batches took 42.64 seconds for the baseline and 41.67 seconds for the proposed model.
+These measurements confirm feasibility but are not final accuracy results.
+
 ## Proposed Method
 
 The baseline will be a standard 3D U-Net with volumetric convolution, encoder-decoder stages, and skip connections.
@@ -103,6 +112,8 @@ The proposed model will add:
 
 Both models will use the same patient split, preprocessing, augmentations, training budget, and evaluation code.
 This controlled comparison will isolate the effects of residual learning and deep supervision.
+The random state is reset after model initialization so both architectures receive the same shuffled cases, sampled patches, and random flips for a given seed.
+The best checkpoint is selected using validation Dice for class 5, the prostate, because prostate contouring is the primary acceptance target.
 
 Initial experiments will use 3D patches and batch size one.
 Patch size and channel width will be selected through a measured GPU memory smoke test.
@@ -127,7 +138,7 @@ The qualitative evaluation will examine disconnected predictions, leakage into n
 
 The main risks are GPU memory limits, severe class imbalance, inconsistent physical spacing, and data leakage across longitudinal scans.
 
-The initial compute budget is one A100 GPU, a short smoke test, and then a controlled baseline run before full proposed-model training.
+The initial A100 smoke test and controlled baseline comparison have been completed.
 Long training runs will use Slurm batch jobs.
 Short debugging sessions will use limited interactive allocations.
 
@@ -135,15 +146,21 @@ If memory use is excessive, the first fallback will reduce patch size and base c
 If class imbalance prevents learning of small organs, the loss weighting and foreground sampling strategy will be adjusted using explicit measured thresholds.
 If spatial resampling removes clinically important detail, native-resolution patch training will be compared against common-spacing preprocessing.
 
-The next experiment will verify the label mapping, generate a deterministic patient-level split, and run one training and validation batch through the standard 3D U-Net.
+The next experiment will train the baseline and selected model for the same 30-epoch budget and then evaluate both best checkpoints on the complete held-out test split.
 
 ## Planned Repository Structure
 
 ```text
 modules.py
 dataset.py
+losses.py
 train.py
 predict.py
+metrics.py
+train_gpu.sh
+evaluate_gpu.sh
+smoke_gpu.sh
+benchmark_gpu.sh
 README.md
 ```
 

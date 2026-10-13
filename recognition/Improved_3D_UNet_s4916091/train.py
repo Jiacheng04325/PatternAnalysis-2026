@@ -44,6 +44,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="auto")
     parser.add_argument("--foreground-probability", type=float, default=0.75)
     parser.add_argument("--class-weights", type=float, nargs=6)
+    parser.add_argument("--selection-class", type=int, default=5)
     parser.add_argument("--amp", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--deterministic", action="store_true")
     parser.add_argument("--max-train-batches", type=int)
@@ -212,6 +213,7 @@ def train(arguments: argparse.Namespace) -> None:
     write_split_manifest(splits, output_directory / "split_manifest.json")
 
     model = create_model(arguments.model, arguments.base_channels).to(device)
+    _set_seed(arguments.seed, arguments.deterministic, device)
     base_loss = DiceCrossEntropyLoss(class_weights=arguments.class_weights)
     criterion = DeepSupervisionLoss(base_loss).to(device)
     optimizer = torch.optim.AdamW(
@@ -275,6 +277,14 @@ def train(arguments: argparse.Namespace) -> None:
             metrics_file.write(json.dumps(epoch_metrics) + "\n")
         print(json.dumps(epoch_metrics, indent=2), flush=True)
 
+        selection_score = validation_metrics["per_class_dice"][
+            arguments.selection_class
+        ]
+        if selection_score is None:
+            raise RuntimeError(
+                "Validation Dice is undefined for checkpoint selection class "
+                f"{arguments.selection_class}"
+            )
         state = {
             "epoch": epoch,
             "model_name": arguments.model,
@@ -286,15 +296,18 @@ def train(arguments: argparse.Namespace) -> None:
             "validation_mean_foreground_dice": validation_metrics[
                 "mean_foreground_dice"
             ],
+            "validation_selection_class": arguments.selection_class,
+            "validation_selection_dice": selection_score,
         }
         _save_checkpoint(state, output_directory / "last.pt")
-        current_score = validation_metrics["mean_foreground_dice"]
+        current_score = selection_score
         if current_score > best_score:
             best_score = current_score
             _save_checkpoint(state, output_directory / "best.pt")
 
     summary = {
-        "best_validation_mean_foreground_dice": best_score,
+        "selection_class": arguments.selection_class,
+        "best_validation_selection_dice": best_score,
         "device": str(device),
         "mixed_precision": use_amp,
         "trainable_parameters": count_trainable_parameters(model),
@@ -358,6 +371,11 @@ def _validate_arguments(arguments: argparse.Namespace) -> None:
         )
     if arguments.workers < 0:
         raise ValueError(f"workers must be non-negative, received {arguments.workers}")
+    if not 0 <= arguments.selection_class < 6:
+        raise ValueError(
+            "selection_class must be in [0, 5], "
+            f"received {arguments.selection_class}"
+        )
 
 
 def _prepare_output_directory(path: Path) -> None:
