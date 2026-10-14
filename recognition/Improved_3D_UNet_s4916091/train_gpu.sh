@@ -27,8 +27,7 @@ export TMP="$HOME/tmp"
 export TEMP="$HOME/tmp"
 mkdir -p "$HOME/tmp"
 
-source "$HOME/miniconda3/bin/activate"
-conda activate torch
+source "$HOME/miniconda3/bin/activate" torch
 
 PROJECT_DIR="$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091"
 OUTPUT_DIR="$HOME/comp3710_runs/formal_${MODEL_NAME}_${SLURM_JOB_ID}"
