@@ -173,11 +173,14 @@ def save_failure_analysis_figure(
         for axis in axes[row]:
             axis.imshow(display_image, cmap="gray", vmin=0.0, vmax=1.0)
             axis.axis("off")
-        axes[row, 0].set_ylabel(
+        axes[row, 0].text(
+            -0.06,
+            0.5,
             f"{selection_name}\nz={slice_index}",
-            rotation=0,
-            labelpad=48,
+            transform=axes[row, 0].transAxes,
+            ha="right",
             va="center",
+            fontsize=10,
         )
         _show_label_overlay(axes[row, 1], target_slice, colour_map)
         _show_label_overlay(axes[row, 2], baseline_slice, colour_map)
@@ -199,7 +202,7 @@ def save_failure_analysis_figure(
         "Prostate failure analysis: red=false positive, cyan=false negative",
         y=1.0,
     )
-    figure.tight_layout()
+    figure.tight_layout(rect=(0.08, 0.0, 1.0, 0.98))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=160, bbox_inches="tight")
     plt.close(figure)
