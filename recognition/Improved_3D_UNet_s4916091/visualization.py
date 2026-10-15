@@ -10,6 +10,7 @@ import numpy as np
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
+from scipy.ndimage import distance_transform_edt
 
 
 CLASS_NAMES = (
@@ -130,6 +131,81 @@ def save_segmentation_figure(
     return slice_index
 
 
+def save_failure_analysis_figure(
+    image: np.ndarray,
+    target: np.ndarray,
+    baseline_prediction: np.ndarray,
+    proposed_prediction: np.ndarray,
+    output_path: Path,
+    focus_class: int = 5,
+) -> dict[str, int]:
+    _validate_volumes(image, target, baseline_prediction, focus_class)
+    _validate_volumes(image, target, proposed_prediction, focus_class)
+    selections = _select_failure_analysis_slices(
+        target,
+        baseline_prediction,
+        proposed_prediction,
+        focus_class,
+    )
+    colour_map = ListedColormap(CLASS_COLOURS)
+    figure, axes = plt.subplots(
+        len(selections),
+        6,
+        figsize=(22, 3.6 * len(selections)),
+        squeeze=False,
+    )
+    column_titles = (
+        "Input MRI",
+        "Ground truth",
+        "Baseline",
+        "Improved",
+        "Baseline errors",
+        "Improved errors",
+    )
+    for column, title in enumerate(column_titles):
+        axes[0, column].set_title(title)
+
+    for row, (selection_name, slice_index) in enumerate(selections.items()):
+        display_image = _scale_image(image[slice_index])
+        target_slice = target[slice_index]
+        baseline_slice = baseline_prediction[slice_index]
+        proposed_slice = proposed_prediction[slice_index]
+        for axis in axes[row]:
+            axis.imshow(display_image, cmap="gray", vmin=0.0, vmax=1.0)
+            axis.axis("off")
+        axes[row, 0].set_ylabel(
+            f"{selection_name}\nz={slice_index}",
+            rotation=0,
+            labelpad=48,
+            va="center",
+        )
+        _show_label_overlay(axes[row, 1], target_slice, colour_map)
+        _show_label_overlay(axes[row, 2], baseline_slice, colour_map)
+        _show_label_overlay(axes[row, 3], proposed_slice, colour_map)
+        _show_error_overlay(
+            axes[row, 4],
+            target_slice,
+            baseline_slice,
+            focus_class,
+        )
+        _show_error_overlay(
+            axes[row, 5],
+            target_slice,
+            proposed_slice,
+            focus_class,
+        )
+
+    figure.suptitle(
+        "Prostate failure analysis: red=false positive, cyan=false negative",
+        y=1.0,
+    )
+    figure.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output_path, dpi=160, bbox_inches="tight")
+    plt.close(figure)
+    return selections
+
+
 def _read_json_lines(path: Path) -> list[dict[str, Any]]:
     records = []
     with path.open("r", encoding="utf-8") as metrics_file:
@@ -176,6 +252,93 @@ def _select_slice(
     return target.shape[0] // 2
 
 
+def _select_failure_analysis_slices(
+    target: np.ndarray,
+    baseline_prediction: np.ndarray,
+    proposed_prediction: np.ndarray,
+    focus_class: int,
+) -> dict[str, int]:
+    target_mask = target == focus_class
+    target_counts = np.sum(target_mask, axis=(1, 2))
+    target_slices = np.flatnonzero(target_counts)
+    if target_slices.size == 0:
+        raise ValueError(f"Focus class {focus_class} is absent from the target")
+
+    selections: dict[str, int] = {}
+    selected_indices: set[int] = set()
+
+    def add_selection(name: str, index: int) -> None:
+        if index not in selected_indices:
+            selections[name] = index
+            selected_indices.add(index)
+
+    add_selection("Apex extent", int(target_slices[0]))
+    add_selection("Largest target", int(np.argmax(target_counts)))
+    add_selection("Base extent", int(target_slices[-1]))
+
+    baseline_false_positive = np.logical_and(
+        baseline_prediction == focus_class,
+        ~target_mask,
+    )
+    proposed_false_positive = np.logical_and(
+        proposed_prediction == focus_class,
+        ~target_mask,
+    )
+    combined_false_positive = np.logical_or(
+        baseline_false_positive,
+        proposed_false_positive,
+    )
+    distance_from_target = distance_transform_edt(~target_mask)
+    false_positive_distances = np.where(
+        combined_false_positive,
+        distance_from_target,
+        0.0,
+    )
+    farthest_false_positive = np.max(false_positive_distances, axis=(1, 2))
+    _add_highest_error_slice(
+        selections,
+        selected_indices,
+        "Most distant false positive",
+        farthest_false_positive,
+    )
+
+    baseline_false_negative = np.logical_and(
+        target_mask,
+        baseline_prediction != focus_class,
+    )
+    proposed_false_negative = np.logical_and(
+        target_mask,
+        proposed_prediction != focus_class,
+    )
+    false_negative_counts = np.maximum(
+        np.sum(baseline_false_negative, axis=(1, 2)),
+        np.sum(proposed_false_negative, axis=(1, 2)),
+    )
+    _add_highest_error_slice(
+        selections,
+        selected_indices,
+        "Maximum false negative",
+        false_negative_counts,
+    )
+    return selections
+
+
+def _add_highest_error_slice(
+    selections: dict[str, int],
+    selected_indices: set[int],
+    name: str,
+    counts: np.ndarray,
+) -> None:
+    for index in np.argsort(counts)[::-1]:
+        candidate = int(index)
+        if counts[candidate] <= 0:
+            return
+        if candidate not in selected_indices:
+            selections[name] = candidate
+            selected_indices.add(candidate)
+            return
+
+
 def _scale_image(image: np.ndarray) -> np.ndarray:
     finite_values = image[np.isfinite(image)]
     if finite_values.size == 0:
@@ -201,4 +364,30 @@ def _show_label_overlay(
         vmax=len(CLASS_NAMES) - 1,
         alpha=0.65,
         interpolation="nearest",
+    )
+
+
+def _show_error_overlay(
+    axis: Any,
+    target: np.ndarray,
+    prediction: np.ndarray,
+    focus_class: int,
+) -> None:
+    false_positive = np.logical_and(
+        prediction == focus_class,
+        target != focus_class,
+    )
+    false_negative = np.logical_and(
+        target == focus_class,
+        prediction != focus_class,
+    )
+    axis.imshow(
+        np.ma.masked_where(~false_positive, false_positive),
+        cmap=ListedColormap(("#ff0000",)),
+        alpha=0.85,
+    )
+    axis.imshow(
+        np.ma.masked_where(~false_negative, false_negative),
+        cmap=ListedColormap(("#00bfff",)),
+        alpha=0.85,
     )
