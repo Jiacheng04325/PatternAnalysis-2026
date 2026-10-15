@@ -1,3 +1,8 @@
+"""Generate paired qualitative autopsies for selected HipMRI cases.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 import argparse

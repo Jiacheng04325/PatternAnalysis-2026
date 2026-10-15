@@ -1,3 +1,8 @@
+"""Compute overlap and physical-distance segmentation metrics.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence

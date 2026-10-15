@@ -1,3 +1,8 @@
+"""Discover, validate, split, normalise, augment, and load HipMRI volumes.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 import argparse

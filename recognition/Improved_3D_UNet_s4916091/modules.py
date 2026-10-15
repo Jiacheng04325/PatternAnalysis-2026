@@ -1,3 +1,8 @@
+"""Define the baseline 3D U-Net and residual deep-supervised 3D U-Net.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

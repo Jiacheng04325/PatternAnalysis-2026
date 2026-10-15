@@ -1,3 +1,8 @@
+"""Create training, prediction, and targeted failure-analysis figures.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 import json

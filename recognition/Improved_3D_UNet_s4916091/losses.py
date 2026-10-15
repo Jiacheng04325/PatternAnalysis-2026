@@ -1,3 +1,8 @@
+"""Implement segmentation objectives and streaming Dice statistics.
+
+Author: Jiacheng Yu (s4916091).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
