@@ -138,6 +138,13 @@ The validation values below were measured on deterministic centre patches, while
 
 The late-epoch metrics show that both models had largely converged by epoch 27 rather than continuing to improve through epoch 30.
 
+| Standard 3D U-Net | Improved 3D U-Net |
+|---|---|
+| ![Standard 3D U-Net training and validation curves](figures/baseline_training_curves.png) | ![Improved 3D U-Net training and validation curves](figures/improved_training_curves.png) |
+
+The curves show the combined Dice and Cross-Entropy loss and the prostate Dice across all 30 epochs.
+They provide visual evidence of rapid early learning followed by smaller late-stage improvements and fluctuations.
+
 | Model | Validation metric | Epoch 21 | Epoch 27 | Epoch 30 | Late-training behaviour |
 |---|---|---:|---:|---:|---|
 | Standard 3D U-Net | Prostate Dice | 0.8445 | **0.8499** | 0.8433 | Plateau with small fluctuations |
