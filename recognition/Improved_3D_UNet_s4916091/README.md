@@ -132,6 +132,26 @@ Both formal training jobs completed successfully on one NVIDIA A100-PCIE-40GB GP
 Both models selected epoch 27 as their best checkpoint using validation prostate Dice.
 The validation values below were measured on deterministic centre patches, while the held-out test values were measured on complete volumes using sliding-window inference.
 
+### Training Dynamics
+
+The late-epoch metrics show that both models had largely converged by epoch 27 rather than continuing to improve through epoch 30.
+
+| Model | Validation metric | Epoch 21 | Epoch 27 | Epoch 30 | Late-training behaviour |
+|---|---|---:|---:|---:|---|
+| Standard 3D U-Net | Prostate Dice | 0.8445 | **0.8499** | 0.8433 | Plateau with small fluctuations |
+| Standard 3D U-Net | Loss | 0.1174 | 0.1109 | 0.1115 | Plateau after decreasing |
+| Improved 3D U-Net | Prostate Dice | 0.8480 | **0.8644** | 0.8594 | Plateau with small fluctuations |
+| Improved 3D U-Net | Loss | 0.1023 | 0.0929 | 0.0929 | Plateau after decreasing |
+
+For the proposed model, validation prostate Dice increased from 0.8480 at epoch 21 to its best value of 0.8644 at epoch 27, then remained close at 0.8594 by epoch 30.
+Its validation loss decreased from 0.1023 to 0.0929 and was effectively unchanged between epochs 27 and 30.
+The baseline followed the same pattern: its best validation prostate Dice was 0.8499 at epoch 27 and decreased slightly to 0.8433 at epoch 30, while validation loss changed only from 0.1109 to 0.1115.
+Training loss continued to decrease modestly for both models, but the validation metrics did not show a corresponding late improvement.
+This pattern indicates diminishing returns and a small late-stage overfitting signal, but not severe train-validation divergence.
+Random foreground-aware patch sampling also explains part of the non-monotonic epoch-to-epoch variation.
+The cosine-annealed learning rate had fallen to approximately 0.00000274 by epoch 30, so further training under the same schedule was unlikely to produce a material gain.
+Epoch 30 was therefore retained as a common upper training budget, while epoch 27 was selected independently for both models using validation prostate Dice.
+
 ### Validation and Training Resources
 
 | Model | Best epoch | Validation prostate Dice | Validation mean foreground Dice | Peak training VRAM | Total training time |
