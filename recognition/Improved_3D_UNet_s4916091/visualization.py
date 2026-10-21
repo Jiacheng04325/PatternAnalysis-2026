@@ -143,8 +143,6 @@ def save_failure_analysis_figure(
     proposed_prediction: np.ndarray,
     output_path: Path,
     focus_class: int = 5,
-    baseline_label: str = "Baseline",
-    proposed_label: str = "Improved",
 ) -> dict[str, int]:
     _validate_volumes(image, target, baseline_prediction, focus_class)
     _validate_volumes(image, target, proposed_prediction, focus_class)
@@ -164,10 +162,10 @@ def save_failure_analysis_figure(
     column_titles = (
         "Input MRI",
         "Ground truth",
-        baseline_label,
-        proposed_label,
-        f"{baseline_label} errors",
-        f"{proposed_label} errors",
+        "Baseline",
+        "Improved",
+        "Baseline errors",
+        "Improved errors",
     )
     for column, title in enumerate(column_titles):
         axes[0, column].set_title(title)
