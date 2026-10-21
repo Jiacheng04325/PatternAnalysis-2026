@@ -312,14 +312,6 @@ Submit the matched slice-wise 2D U-Net comparator:
 sbatch "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/train_2d_gpu.sh"
 ```
 
-Before the formal run, validate the complete 2D path with a bounded GPU smoke test:
-
-```bash
-EPOCHS=1 BASE_CHANNELS=2 SLICES_PER_VOLUME=2 SLICE_BATCH_SIZE=2 \
-MAX_TRAIN_VOLUMES=1 MAX_VALIDATION_VOLUMES=1 RUN_PREFIX=smoke_baseline_2d \
-sbatch "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/train_2d_gpu.sh"
-```
-
 Evaluate a selected checkpoint on the held-out test split:
 
 ```bash
