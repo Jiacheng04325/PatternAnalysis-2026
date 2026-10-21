@@ -9,7 +9,8 @@ The system is not intended to make autonomous clinical decisions.
 
 The selected model is a residual 3D Improved U-Net with deep supervision.
 A standard 3D U-Net provides the required baseline.
-The engineering question is whether residual learning and deep supervision improve the small prostate class and clinically important boundaries enough to justify their additional computational cost.
+The broader Project 2.2 dilemma asks whether 3D volumetric context provides clinically useful boundary improvements over slice-wise 2D segmentation at an acceptable computational cost.
+This implementation addresses a controlled question within the 3D setting: whether residual learning and deep supervision improve the small prostate class and clinically important boundaries over a standard 3D U-Net enough to justify their additional computational cost.
 
 ## Feasibility Review
 
@@ -94,6 +95,7 @@ The proposed model has 5,734,888 trainable parameters, compared with 5,646,470 f
 Both models used the same split, preprocessing, augmentations, sampled patches, seed, training budget, and evaluation code.
 MRI intensities were normalised per volume using robust non-zero percentiles.
 Training used native-resolution `64 x 128 x 128` patches rather than global downsampling so that small prostate boundaries were not removed before learning.
+This deliberately replaces global volume downsampling with native-resolution patch sampling: global downsampling would reduce memory use, but it could remove the thin prostate boundaries central to the clinical question.
 Foreground-aware sampling selected a patch centred on the bladder, rectum, or prostate with probability 0.75.
 Random axis flips provided spatial augmentation.
 
@@ -242,7 +244,16 @@ Until disconnected predictions and difficult apex and base errors are further co
 
 The matched standard 3D U-Net baseline isolates the contribution of residual units and deep supervision under the same volumetric context.
 This experiment does not directly quantify the difference between slice-wise 2D and volumetric 3D processing, so the recommendation is limited to choosing between the two implemented 3D models.
-A matched 2D U-Net trained and evaluated on the same patient split would be required for a direct 2D-versus-3D conclusion.
+A direct follow-up experiment should train a 2D U-Net using slices from the same patient-level split and compare Dice, HD95, inference time, peak VRAM, and inter-slice contour continuity.
+That comparison is required before making a general claim that 3D processing is superior to 2D processing.
+
+### Engineering Recommendation
+
+The Improved 3D U-Net is recommended over the standard 3D U-Net for an expert-reviewed annotation-assistance workflow.
+On the held-out test set, it increased prostate Dice from 0.7880 to 0.8170 and reduced mean prostate HD95 from 34.94 mm to 19.65 mm, while using 1,002.6 MB of peak training VRAM and 0.311 seconds of inference time per volume.
+These gains justify the small additional computational cost on the tested A100 GPU.
+However, the model should not be used for autonomous radiotherapy planning because individual regressions and disconnected false-positive regions remain possible, particularly near the prostate base and apex.
+All generated contours should therefore be reviewed by an imaging specialist or radiation oncologist, and cases with disconnected predictions, unusually large HD95 values, or uncertain base and apex boundaries should be prioritised for manual correction.
 
 Raw NIfTI data, full predictions, and checkpoints are kept outside the public repository.
 The selected derived figures are included for academic reporting under the HipMRI acknowledgement and citation requirements.
