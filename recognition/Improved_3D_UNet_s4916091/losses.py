@@ -58,7 +58,7 @@ class DiceCrossEntropyLoss(nn.Module):
         probabilities = torch.softmax(logits, dim=1)
         one_hot = functional.one_hot(target, num_classes=logits.shape[1])
         one_hot = one_hot.movedim(-1, 1).to(dtype=probabilities.dtype)
-        reduction_dimensions = (0, 2, 3, 4)
+        reduction_dimensions = (0, *range(2, logits.ndim))
         intersection = torch.sum(probabilities * one_hot, dim=reduction_dimensions)
         denominator = torch.sum(
             probabilities + one_hot,
@@ -123,7 +123,7 @@ def dice_statistics(
         target,
         num_classes=logits.shape[1],
     ).movedim(-1, 1)
-    reduction_dimensions = (0, 2, 3, 4)
+    reduction_dimensions = (0, *range(2, logits.ndim))
     intersection_twice = 2 * torch.sum(
         prediction_one_hot * target_one_hot,
         dim=reduction_dimensions,
@@ -153,9 +153,10 @@ def _validate_logits_and_target(
     logits: torch.Tensor,
     target: torch.Tensor,
 ) -> None:
-    if logits.ndim != 5:
+    if logits.ndim not in (4, 5):
         raise ValueError(
-            "Expected logits shape [batch, classes, depth, height, width], "
+            "Expected 2D or 3D segmentation logits with shape "
+            "[batch, classes, *spatial], "
             f"received {tuple(logits.shape)}"
         )
     expected_target_shape = (logits.shape[0], *logits.shape[2:])

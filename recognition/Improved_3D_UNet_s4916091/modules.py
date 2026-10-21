@@ -1,4 +1,4 @@
-"""Define the baseline 3D U-Net and residual deep-supervised 3D U-Net.
+"""Define matched 2D and 3D U-Net segmentation models.
 
 Author: Jiacheng Yu (s4916091).
 """
@@ -13,6 +13,114 @@ from torch import nn
 
 
 SegmentationOutput = tuple[torch.Tensor, tuple[torch.Tensor, ...]]
+
+
+class ConvBlock2D(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.LeakyReLU(negative_slope=0.01, inplace=True),
+        )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        return self.layers(inputs)
+
+
+class Encoder2D(nn.Module):
+    def __init__(self, in_channels: int, channels: tuple[int, ...]) -> None:
+        super().__init__()
+        blocks = []
+        current_channels = in_channels
+        for out_channels in channels:
+            blocks.append(ConvBlock2D(current_channels, out_channels))
+            current_channels = out_channels
+        self.blocks = nn.ModuleList(blocks)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+
+    def forward(self, inputs: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        features = []
+        outputs = inputs
+        for index, block in enumerate(self.blocks):
+            outputs = block(outputs)
+            features.append(outputs)
+            if index < len(self.blocks) - 1:
+                outputs = self.pool(outputs)
+        return tuple(features)
+
+
+class DecoderStage2D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        skip_channels: int,
+        out_channels: int,
+    ) -> None:
+        super().__init__()
+        self.upsample = nn.ConvTranspose2d(
+            in_channels,
+            out_channels,
+            kernel_size=2,
+            stride=2,
+        )
+        self.block = ConvBlock2D(out_channels + skip_channels, out_channels)
+
+    def forward(self, inputs: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        outputs = self.upsample(inputs)
+        if outputs.shape[2:] != skip.shape[2:]:
+            outputs = functional.interpolate(
+                outputs,
+                size=skip.shape[2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+        return self.block(torch.cat((skip, outputs), dim=1))
+
+
+class UNet2D(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 1,
+        num_classes: int = 6,
+        base_channels: int = 16,
+    ) -> None:
+        super().__init__()
+        _validate_configuration(in_channels, num_classes, base_channels)
+        channels = tuple(base_channels * 2**index for index in range(5))
+        self.encoder = Encoder2D(in_channels, channels)
+        self.decoder = nn.ModuleList(
+            DecoderStage2D(
+                in_channels=decoder_channels,
+                skip_channels=skip_channels,
+                out_channels=skip_channels,
+            )
+            for decoder_channels, skip_channels in zip(
+                reversed(channels[1:]),
+                reversed(channels[:-1]),
+                strict=True,
+            )
+        )
+        self.segmentation_head = nn.Conv2d(channels[0], num_classes, kernel_size=1)
+
+    def forward(self, inputs: torch.Tensor) -> SegmentationOutput:
+        if inputs.ndim != 4:
+            raise ValueError(
+                "Expected input shape [batch, channels, height, width], "
+                f"received {tuple(inputs.shape)}"
+            )
+        if min(inputs.shape[2:]) < 32:
+            raise ValueError(
+                f"Every spatial dimension must be at least 32, received {inputs.shape[2:]}"
+            )
+        features = self.encoder(inputs)
+        outputs = features[-1]
+        for stage, skip in zip(self.decoder, reversed(features[:-1]), strict=True):
+            outputs = stage(outputs, skip)
+        return self.segmentation_head(outputs), ()
 
 
 class ConvBlock3D(nn.Module):

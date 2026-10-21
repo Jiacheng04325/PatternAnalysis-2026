@@ -88,11 +88,11 @@ Every label is present in all 211 volumes.
 
 ## Method
 
-The baseline is a standard 3D U-Net with five encoder feature scales, four decoder stages, and skip connections.
+The primary baseline is a standard 3D U-Net with five encoder feature scales, four decoder stages, and skip connections.
 The proposed model replaces the standard convolution blocks with residual units and adds three deep-supervision outputs.
 The proposed model has 5,734,888 trainable parameters, compared with 5,646,470 for the baseline, which is an increase of 88,418 parameters or 1.57 percent.
 
-Both models used the same split, preprocessing, augmentations, sampled patches, seed, training budget, and evaluation code.
+Both 3D models used the same split, preprocessing, augmentations, sampled patches, seed, training budget, and evaluation code.
 MRI intensities were normalised per volume using robust non-zero percentiles.
 Training used native-resolution `64 x 128 x 128` patches rather than global downsampling so that small prostate boundaries were not removed before learning.
 This deliberately replaces global volume downsampling with native-resolution patch sampling: global downsampling would reduce memory use, but it could remove the thin prostate boundaries central to the clinical question.
@@ -110,6 +110,15 @@ The best checkpoint was selected using validation Dice for class 5, the prostate
 
 Full-volume prediction used Gaussian-weighted sliding-window inference with `64 x 128 x 128` patches, 50 percent overlap, and a window batch size of 2.
 Dice, Intersection-over-Union, and physical-distance HD95 were calculated on the held-out test split.
+
+### Direct 2D Comparator Protocol
+
+A standard slice-wise 2D U-Net is implemented as a secondary baseline to directly investigate the Project 2.2 spatial-context dilemma.
+It uses the same five feature scales, base-channel count, patient split, per-volume intensity normalisation, Dice and Cross-Entropy objective, foreground probability, optimiser, learning-rate schedule, 30-epoch budget, and prostate-based checkpoint selection as the 3D models.
+Each training volume contributes 16 native-resolution axial slices per epoch, selected with the same 0.75 foreground probability.
+This exposes each model to the same number of input voxels per training volume because `16 x 256 x 256 = 64 x 128 x 128 = 1,048,576`.
+Validation and testing process every axial slice, reassemble the predictions into the original 3D volume, and apply the same volume-level Dice, IoU, and physical-distance HD95 evaluation.
+This design measures the effect of inter-slice context while controlling the patient cohort, spatial resolution, training duration, objective, and approximate voxel budget.
 
 ### Architecture
 
@@ -297,11 +306,24 @@ sbatch "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/train_g
 sbatch "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/train_gpu.sh" proposed
 ```
 
+Submit the matched slice-wise 2D U-Net comparator:
+
+```bash
+sbatch "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/train_2d_gpu.sh"
+```
+
 Evaluate a selected checkpoint on the held-out test split:
 
 ```bash
 sbatch --export=ALL,CHECKPOINT="$HOME/comp3710_runs/formal_proposed_JOB_ID/best.pt",SPLIT=test \
   "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/evaluate_gpu.sh"
+```
+
+Evaluate the 2D checkpoint on the same held-out test split:
+
+```bash
+sbatch --export=ALL,CHECKPOINT="$HOME/comp3710_runs/formal_baseline_2d_JOB_ID/best.pt",SPLIT=test \
+  "$HOME/PatternAnalysis-2026/recognition/Improved_3D_UNet_s4916091/evaluate_2d_gpu.sh"
 ```
 
 Generate the five-case paired failure analysis after both evaluations complete:
@@ -315,6 +337,19 @@ python failure_analysis.py \
   --cases J005_Week0 R024_Week1 J005_Week4 O025_Week0 M004_Week6
 ```
 
+Use the same command with the 2D prediction directory and explicit column labels to generate the direct 2D-versus-3D autopsy:
+
+```bash
+python failure_analysis.py \
+  --data-root /home/groups/comp3710/HipMRI_Study_open \
+  --baseline-predictions "$HOME/comp3710_runs/evaluation_2d_JOB_ID/predictions" \
+  --proposed-predictions "$HOME/comp3710_runs/evaluation_PROPOSED_JOB_ID/predictions" \
+  --baseline-label "2D U-Net" \
+  --proposed-label "Improved 3D U-Net" \
+  --output-dir "$HOME/comp3710_runs/failure_analysis_2d_vs_3d" \
+  --cases J005_Week0 R024_Week1 J005_Week4 O025_Week0 M004_Week6
+```
+
 ## Repository Structure
 
 ```text
@@ -323,12 +358,16 @@ dataset.py
 losses.py
 train.py
 predict.py
+train_2d.py
+predict_2d.py
 metrics.py
 visualization.py
 failure_analysis.py
 figures/
 train_gpu.sh
 evaluate_gpu.sh
+train_2d_gpu.sh
+evaluate_2d_gpu.sh
 smoke_gpu.sh
 benchmark_gpu.sh
 requirements.txt

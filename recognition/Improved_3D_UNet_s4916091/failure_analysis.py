@@ -25,6 +25,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--cases", nargs="+", required=True)
     parser.add_argument("--focus-class", type=int, default=5)
+    parser.add_argument("--baseline-label", default="Baseline")
+    parser.add_argument("--proposed-label", default="Improved")
     return parser
 
 
@@ -67,6 +69,8 @@ def create_failure_analysis(arguments: argparse.Namespace) -> None:
             proposed_prediction=proposed_prediction,
             output_path=figure_path,
             focus_class=arguments.focus_class,
+            baseline_label=arguments.baseline_label,
+            proposed_label=arguments.proposed_label,
         )
         result = {
             "case": case_name,
@@ -84,6 +88,8 @@ def create_failure_analysis(arguments: argparse.Namespace) -> None:
         "proposed_predictions": str(
             arguments.proposed_predictions.expanduser().resolve()
         ),
+        "baseline_label": arguments.baseline_label,
+        "proposed_label": arguments.proposed_label,
         "cases": results,
     }
     summary_path.write_text(
