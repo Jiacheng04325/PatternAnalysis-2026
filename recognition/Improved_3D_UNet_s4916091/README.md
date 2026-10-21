@@ -10,7 +10,9 @@ The system is not intended to make autonomous clinical decisions.
 The selected model is a residual 3D Improved U-Net with deep supervision.
 A standard 3D U-Net provides the required baseline.
 The broader Project 2.2 dilemma asks whether 3D volumetric context provides clinically useful boundary improvements over slice-wise 2D segmentation at an acceptable computational cost.
-This implementation addresses a controlled question within the 3D setting: whether residual learning and deep supervision improve the small prostate class and clinically important boundaries over a standard 3D U-Net enough to justify their additional computational cost.
+Project 2.2 permits a basic 2D or 3D U-Net as the implemented baseline.
+This project uses a matched standard 3D U-Net so that both models receive the same volumetric context and the experiment can isolate the effects of residual learning and deep supervision.
+It therefore addresses a controlled question within the 3D setting and does not claim to establish that 3D processing is superior to 2D processing.
 
 ## Feasibility Review
 
@@ -168,10 +170,13 @@ Epoch 30 was therefore retained as a common upper training budget, while epoch 2
 | Standard 3D U-Net | 27 | 0.8499 | 0.9033 | 699.9 MB | 3:45:14 |
 | Improved 3D U-Net | 27 | 0.8644 | 0.9173 | 1,002.6 MB | 3:43:29 |
 
+Peak VRAM is the maximum memory allocated by PyTorch during an epoch, measured with `torch.cuda.max_memory_allocated`.
+
 ### Held-Out Test Results
 
-The following scores aggregate all voxels from the 31 test volumes.
-HD95 is the mean of the per-volume class HD95 values in millimetres.
+The Dice and IoU scores pool voxel counts across all 31 test volumes before calculation.
+HD95 is the arithmetic mean of the per-volume class HD95 values in millimetres.
+Prostate HD95 was defined for all 31 test volumes because both the reference and prediction contained prostate voxels in every case.
 
 | Structure | Baseline Dice | Improved Dice | Baseline IoU | Improved IoU | Baseline HD95 | Improved HD95 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -188,14 +193,16 @@ Mean foreground Dice increased by 0.0386, and every foreground class achieved a 
 
 ### Resource Profile
 
-| Model | Trainable parameters | Peak training VRAM | Total training time | Mean inference per volume |
+| Model | Trainable parameters | Peak PyTorch allocated VRAM | Total training time | Mean sliding-window forward time |
 |---|---:|---:|---:|---:|
 | Standard 3D U-Net | 5,646,470 | 699.9 MB | 3:45:14 | 0.255 s |
 | Improved 3D U-Net | 5,734,888 | 1,002.6 MB | 3:43:29 | 0.311 s |
 
-The proposed model increased mean inference time from 0.255 seconds to 0.311 seconds per volume.
+The proposed model increased mean sliding-window forward time from 0.255 seconds to 0.311 seconds per volume.
 Its peak training memory increased by 302.7 MB, but remained approximately 1.0 GB and far below the 24 GB limit.
 The accuracy and boundary improvements therefore justify the measured resource increase for an annotation-assistance prototype.
+Inference time was measured around the CUDA-synchronised sliding-window model forward pass.
+It excludes NIfTI loading, preprocessing, metric calculation, visualisation, and prediction-file writing, so it should not be interpreted as end-to-end clinical workflow latency.
 
 ### Acceptance-Criteria Outcome
 
@@ -204,7 +211,7 @@ The accuracy and boundary improvements therefore justify the measured resource i
 | Patient-independent split | Passed | 27, 5, and 6 disjoint patients in train, validation, and test sets. |
 | Test prostate Dice at least 0.70 | Passed | Improved model prostate Dice was 0.8170. |
 | Dice gain at least 0.02 or HD95 reduction at least 10% | Passed | Dice increased by 0.0290 and mean HD95 decreased by 43.76%. |
-| Peak VRAM below 24 GB and inference below 30 seconds | Passed | Peak training VRAM was 1,002.6 MB and mean inference was 0.311 seconds. |
+| Peak VRAM below 24 GB and inference below 30 seconds | Passed | Peak PyTorch allocated VRAM was 1,002.6 MB and mean sliding-window forward time was 0.311 seconds. |
 | Three to five representative qualitative cases | Passed | Five paired failure-analysis figures were generated. |
 
 ## Qualitative Failure Analysis
@@ -254,6 +261,10 @@ This experiment does not directly quantify the difference between slice-wise 2D 
 A direct follow-up experiment should train a 2D U-Net using slices from the same patient-level split and compare Dice, HD95, inference time, peak VRAM, and inter-slice contour continuity.
 That comparison is required before making a general claim that 3D processing is superior to 2D processing.
 
+The comparison also uses one training seed and a test split containing 31 longitudinal volumes from 6 patients.
+Repeated volumes from the same patient are correlated, so the 31 volumes must not be treated as 31 independent patients.
+Multiple training seeds and patient-level confidence intervals would be needed to estimate statistical uncertainty and confirm that the measured improvements are stable.
+
 ### Engineering Recommendation
 
 The Improved 3D U-Net is recommended over the standard 3D U-Net for an expert-reviewed annotation-assistance workflow.
@@ -277,6 +288,10 @@ The formal runs used Python 3.11 and the following exact package versions:
 | NiBabel | 5.4.2 |
 | SciPy | 1.17.1 |
 | Matplotlib | 3.11.1 |
+
+Seed 3710 fixes the patient split and pseudorandom sampling sequence.
+The formal Slurm scripts did not enable PyTorch deterministic algorithms, so exact floating-point results may vary across CUDA, cuDNN, driver, and hardware versions.
+The reported results are the recorded outputs from the stated A100 runs rather than a guarantee of bit-for-bit reproduction on another system.
 
 Install the dependencies in a Python environment with a compatible PyTorch and CUDA build:
 
