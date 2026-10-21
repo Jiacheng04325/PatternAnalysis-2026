@@ -20,9 +20,11 @@ This section preserves the pre-training plan used for the compulsory feasibility
 
 ### User Need and Scope
 
+The intended users are imaging specialists and radiation oncologists performing prostate radiotherapy planning.
 Manual pelvic organ contouring is time-consuming and requires experienced clinical staff.
 Under-contouring may exclude part of the target, while over-contouring may expose the bladder wall or rectal mucosa to unnecessary radiation.
 The prototype therefore produces draft segmentations for expert review rather than autonomous treatment contours.
+The central engineering dilemma is balancing clinically useful boundary quality, 3D spatial context, severe class imbalance, and computational cost.
 
 The project uses the HipMRI Study dataset located at:
 
@@ -33,15 +35,16 @@ The project uses the HipMRI Study dataset located at:
 ### Acceptance Criteria
 
 1. The train, validation, and test sets must have no patient overlap, and all longitudinal scans from one patient must remain in one split.
-2. The proposed model must achieve a prostate Dice score of at least 0.70 on held-out test patients.
+2. The proposed model must achieve a prostate Dice score of at least 0.70 on held-out test patients, with per-class Dice and IoU also reported.
 3. Compared with the standard 3D U-Net, the proposed model should improve prostate Dice by at least 0.02 or reduce prostate HD95 by at least 10 percent.
 4. Peak training GPU memory must remain below 24 GB, and inference must complete within 30 seconds per volume on one Rangpur A100 GPU.
-5. The evaluation must inspect three to five representative cases using the MRI, ground truth, predictions, false positives, and false negatives, with attention to the prostate base, apex, and disconnected predictions.
+5. The evaluation must inspect three to five representative cases using the MRI, ground truth, predictions, false positives, and false negatives, with attention to the prostate base, apex, neighbouring bladder and rectum boundaries, and disconnected predictions.
 
 If the proposed model does not provide a meaningful boundary improvement for its additional resource cost, the final recommendation will favour the simpler baseline.
 
 ### Model Choice and Course Concepts
 
+The pre-training check-off plan proposed downsampled 3D HipMRI NIfTI data with patient-level splitting, intensity normalisation, image-label alignment checks, and 3D subvolume sampling.
 A 3D architecture was selected because adjacent MRI slices contain anatomical continuity that a slice-wise 2D model cannot directly represent.
 The standard 3D U-Net baseline follows the encoder-decoder and skip-connection principles of U-Net and 3D U-Net in References 1 and 3.
 The proposed model adds residual units to improve gradient flow and deep supervision to provide learning signals at three decoder scales, following the prescribed Improved U-Net reference in Reference 2.
@@ -59,8 +62,15 @@ An A100 smoke test confirmed that the complete training and validation path coul
 ### Risks, Budget, and Fallback
 
 The main risks are weak soft-tissue contrast, prostate under-segmentation, leakage into the bladder or rectum, disconnected false positives, GPU memory limits, and leakage across longitudinal scans.
-The initial budget was one short CPU data check, one A100 smoke test, and matched 30-epoch baseline and proposed runs.
+The initial compute configuration was one A100 GPU per model, batch size 1, `64 x 128 x 128` subvolumes, 16 base channels, mixed precision, and at most 30 epochs.
+The initial execution budget was one short CPU data check, one A100 smoke test, and matched 30-epoch baseline and proposed runs.
+The planned next experiment was to compare both models using the same split, preprocessing, training budget, and evaluation metrics.
 The planned fallbacks were smaller patches or fewer channels for memory pressure, stronger foreground sampling for missed prostate voxels, and the standard 3D U-Net if the proposed model did not justify its complexity.
+
+### Change After the Check-Off
+
+The final implementation replaced global volume downsampling with native-resolution fixed-size patches because global downsampling could remove the thin prostate boundaries central to the clinical question.
+This change preserved the planned 3D subvolume strategy and stayed within the measured A100 memory budget.
 
 ## Dataset Audit
 
